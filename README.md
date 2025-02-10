@@ -87,6 +87,8 @@ TWITTER_API_KEY=your_api_key
 TWITTER_API_SECRET=your_api_secret
 TWITTER_ACCESS_TOKEN=your_access_token
 TWITTER_ACCESS_SECRET=your_access_secret
+POSTGRES_CONNECTION_STRING=your_connection_string
+AGENT_OPS_API_KEY=your_api_secret
 ```
 
 ### 🚀 **4. Run the FastAPI Server**
