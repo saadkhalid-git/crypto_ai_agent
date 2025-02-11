@@ -22,6 +22,9 @@ load_dotenv()
 # API Keys & Credentials
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
 AGENT_OPS_API_KEY = os.getenv("AGENT_OPS_API_KEY")
+
+agentops.init(AGENT_OPS_API_KEY, default_tags=["AI_Agent", "Monitoring"])
+
 API_URL = (
     "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
 )
@@ -74,9 +77,6 @@ vector_db = Chroma(
     persist_directory=db_path, embedding_function=HuggingFaceEmbeddings()
 )
 retriever = vector_db.as_retriever()
-
-# LangChain Callback for monitoring
-callback_handler = AgentOpsLangchainCallbackHandler(api_key=AGENT_OPS_API_KEY)
 
 # Prompt Template
 prompt_template = PromptTemplate(
@@ -171,45 +171,39 @@ def post_to_instagram(content):
 
 
 @agentops.record_action("Running AI Agent")
-@track_agent(name="crypto_banter_ai_agent")
 def run_agent():
     """Main function to run the AI agent for content generation and posting."""
 
     create_tables()
+    try:
+        print("Running AI agent...")
+        trends = get_vetted_trends()
+        if not trends:
+            print("No relevant trends found. Skipping this cycle.")
+            time.sleep(300)
+            return
 
-    while True:
-        try:
-            agentops.init(AGENT_OPS_API_KEY, default_tags=["AI_Agent", "Monitoring"])
-            print("Running AI agent...")
-            trends = get_vetted_trends()
-            if not trends:
-                print("No relevant trends found. Skipping this cycle.")
-                time.sleep(300)
-                continue
+        rag_context_list = retriever.get_relevant_documents(", ".join(trends))
+        rag_context = " ".join(
+            [doc.page_content for doc in rag_context_list]
+        )  # Ensure correct formatting
 
-            rag_context_list = retriever.get_relevant_documents(", ".join(trends))
-            rag_context = " ".join(
-                [doc.page_content for doc in rag_context_list]
-            )  # Ensure correct formatting
+        formatted_prompt = prompt_template.format(
+            trends=", ".join(trends), rag_context=rag_context
+        )
+        generated_content = generate_text(formatted_prompt)
 
-            formatted_prompt = prompt_template.format(
-                trends=", ".join(trends), rag_context=rag_context
-            )
-            generated_content = generate_text(formatted_prompt)
+        is_valid, vetting_message = vet_content(generated_content)
+        if is_valid:
+            post_to_twitter(generated_content)
+            post_to_instagram(generated_content)
 
-            is_valid, vetting_message = vet_content(generated_content)
-            if is_valid:
-                post_to_twitter(generated_content)
-                post_to_instagram(generated_content)
-            
-
-            print("AI Agent Cycle Complete")
-        except Exception as e:
-            print(f"Error: {str(e)}")
-
-        agentops.end_session("Success")
-        time.sleep(300)
+        print("AI Agent Cycle Complete")
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
 
 
 if __name__ == "__main__":
     run_agent()
+    agentops.end_session('Success')
